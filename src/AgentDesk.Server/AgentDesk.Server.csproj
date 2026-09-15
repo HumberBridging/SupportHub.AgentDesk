@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" Version="2.83.0" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Protobuf Include="..\..\protos\supporthub\agentdesk\v1\agent_desk.proto" ProtoRoot="..\..\protos" GrpcServices="Server" Link="Protos\agent_desk.proto" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Domain\" />
+	</ItemGroup>
+
+</Project>

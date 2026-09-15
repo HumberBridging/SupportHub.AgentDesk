@@ -1,0 +1,104 @@
+syntax = "proto3";
+ 
+package supporthub.agentdesk.v1;
+ 
+option csharp_namespace = "SupportHub.AgentDesk.V1";
+ 
+import "google/protobuf/timestamp.proto"; // -> DateTime / DateTimeOffset (UTC)
+
+
+// Naming: the service is "AgentDeskService", not "AgentDesk".
+service AgentDeskService {
+  
+  //Unary
+  rpc GetTicket (GetTicketRequest) returns (Ticket);
+
+  rpc AssignTicket (AssignTicketRequest) returns (AssignTicketResponse);
+
+  //Server streaming
+  rpc WatchQueue (WatchQueueRequest) returns (stream QueueEvent);
+}
+
+
+//ENUMS
+enum TicketStatus {
+  TICKET_STATUS_UNSPECIFIED = 0;
+  TICKET_STATUS_OPEN = 1;
+  TICKET_STATUS_IN_PROGRESS = 2;
+  TICKET_STATUS_RESOLVED = 3;
+  TICKET_STATUS_CLOSED = 4;
+}
+
+enum TicketPriority {
+  TICKET_PRIORITY_UNSPECIFIED = 0;
+  TICKET_PRIORITY_LOW = 1;
+  TICKET_PRIORITY_MEDIUM = 2;
+  TICKET_PRIORITY_HIGH = 3;
+  TICKET_PRIORITY_CRITICAL = 4;
+}
+
+
+//MESSAGES
+message Ticket {
+int32 ticket_id = 1;
+string title = 2;
+string description = 3;
+TicketStatus status = 4;
+TicketPriority priority = 5;
+int32 customer_id = 6;
+optional int32 assigned_agent_id = 7;
+google.protobuf.Timestamp created_at_utc = 8;
+google.protobuf.Timestamp updated_at_utc = 9;
+ 
+repeated string tags = 10;
+ 
+}
+
+message Agent {
+int32 agent_id = 1;
+string display_name = 2;
+string email = 3;
+bool is_active = 4;
+int32 open_ticket_count = 5;
+ 
+}
+ 
+message GetTicketRequest {
+int32 ticket_id = 1;
+}
+
+message AssignTicketRequest {
+  int32 ticket_id = 1;
+}
+
+message AssignTicketResponse {
+  Ticket ticket = 1;
+  Agent agent = 2;
+}
+
+//Server Streaming
+message WatchQueueRequest {
+  // Deliberately empty for now. Filters (by agent, by minimum priority) are an
+  // ADDITIVE change later: add fields 1, 2, 3 and every existing client is fine.
+}
+
+message QueueEvent {
+  google.protobuf.Timestamp occurred_at = 1;
+ 
+  // `oneof`: exactly one of these is set. C# gives you QueueEvent.PayloadOneofCase
+  // to switch on, and only the chosen field goes over the wire.
+  oneof payload {
+    Ticket backlog = 2; // an already-open ticket, replayed at the start
+    TicketAssigned assigned = 3; //a ticket was routed to an agent
+  }
+}
+ 
+message TicketAssigned {
+  Ticket ticket = 1;
+  Agent agent = 2;
+}
+
+
+
+
+
