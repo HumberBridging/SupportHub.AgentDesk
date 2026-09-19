@@ -1,7 +1,8 @@
-﻿using Grpc.Core;
+﻿using AgentDesk.Client.Demos;
+using Grpc.Core;
 using Grpc.Net.Client;
-using SupportHub.AgentDesk.V1;
 using SupportHub.AgentDesk.Client.Demos;
+using SupportHub.AgentDesk.V1;
 
 // Point it somewhere else with environment variables, e.g. Azure Container Apps:
 //   AGENTDESK_GRPC_URL=https://agentdesk.<env-id>.canadacentral.azurecontainerapps.io
@@ -34,6 +35,11 @@ try
 
         case "watch":
             await WatchQueueDemo.RunAsync(client);
+            break;
+
+        case "import":
+            //Path is hardcoded here for brevity, but could come from any input
+            await ImportDemo.RunAsync(client, Path.Combine(AppContext.BaseDirectory, "legacy-tickets.csv"));
             break;
 
         default:

@@ -15,6 +15,7 @@ public sealed class TicketStore
     private readonly Dictionary<int, TicketRecord> _tickets = new();
     private readonly List<AgentRecord> _agents;
     private readonly List<CustomerRecord> _customers;
+    private int _nextId = 6; // Thisis hardcoded just for demo purposes (I already have 5 tickets in my system)
 
     /// <summary>
     /// How many in-flight tickets one agent may hold. This is AgentDesk's ROUTING
@@ -183,6 +184,28 @@ public sealed class TicketStore
     {
         foreach (var watcher in _watchers.Values)
             watcher.Writer.TryWrite(evt);
+    }
+
+    //Client streaming
+    public CustomerRecord? FindCustomerByEmail(string? email) =>
+    string.IsNullOrWhiteSpace(email)
+        ? null
+        : _customers.FirstOrDefault(c => c.Email.Equals(email.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    public TicketRecord Create(string title, string description, int customerId, Priority priority)
+    {
+        TicketRecord ticket;
+        lock (_gate)
+        {
+            var id = _nextId++;
+            ticket = new TicketRecord(id, title.Trim(), description.Trim(), TicketState.Open,
+                priority, customerId, AssignedAgentId: null, DateTimeOffset.UtcNow, Tags: []);
+            _tickets[id] = ticket;
+        }
+
+        Publish(new TicketEvent(TicketEventKind.Created, ticket, null, ticket.CreatedAtUtc));
+
+        return ticket;
     }
 
     // ---- helpers -------------------------------------------------------------
