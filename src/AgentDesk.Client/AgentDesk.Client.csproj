@@ -20,4 +20,10 @@
 		<Protobuf Include="..\..\protos\supporthub\agentdesk\v1\agent_desk.proto" ProtoRoot="..\..\protos" GrpcServices="Client" Link="Protos\agent_desk.proto" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="legacy-tickets.csv">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

@@ -47,7 +47,7 @@ public sealed record AgentRecord(int Id, string DisplayName, bool IsActive);
 public sealed record CustomerRecord(int Id, string Name, string Email);
 
 /// <summary>Something happened to a ticket. WatchQueue turns these into QueueEvents.</summary>
-public enum TicketEventKind { Assigned }
+public enum TicketEventKind { Assigned, Created }
 
 public sealed record TicketEvent(TicketEventKind Kind, TicketRecord Ticket, AgentRecord? Agent, DateTimeOffset OccurredAt);
 
@@ -59,3 +59,9 @@ public sealed class TicketNotFoundException(int ticketId)
 public sealed class TicketStateException(string message) : Exception(message);
 
 public sealed class NoAgentAvailableException(string message) : Exception(message);
+
+//Client Streaming
+public sealed class InvalidImportRowException(string message) : Exception(message);
+
+public sealed class UnknownCustomerException(string email)
+    : Exception($"No customer with email '{email}'.");

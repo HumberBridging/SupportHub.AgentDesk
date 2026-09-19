@@ -1,5 +1,6 @@
 ﻿using Grpc.Core;
 using SupportHub.AgentDesk.V1;
+using System.Collections.Concurrent;
 
 namespace SupportHub.AgentDesk.Client.Demos;
 
@@ -39,6 +40,10 @@ public static class WatchQueueDemo
 
                     case QueueEvent.PayloadOneofCase.Assigned:
                         Console.WriteLine($"[{at}] ASSIGNED  #{evt.Assigned.Ticket.TicketId} -> {evt.Assigned.Agent.DisplayName}");
+                        break;
+
+                    case QueueEvent.PayloadOneofCase.Created:
+                        Console.WriteLine($"[{at}] NEW       #{evt.Created.TicketId}  {evt.Created.Title}  ({evt.Created.Priority})");
                         break;
                 }
             }

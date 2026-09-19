@@ -63,4 +63,14 @@ public static class ContractMapping
         Priority.Critical => TicketPriority.Critical,
         _ => TicketPriority.Unspecified,
     };
+
+    //Client Streaming
+    /// <summary>UNSPECIFIED (the proto3 default) becomes Medium — the API's default too.</summary>
+    public static Priority ToDomain(this TicketPriority p) => p switch
+    {
+        TicketPriority.Low => Priority.Low,
+        TicketPriority.High => Priority.High,
+        TicketPriority.Critical => Priority.Critical,
+        _ => Priority.Medium,
+    };
 }

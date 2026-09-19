@@ -1,0 +1,9 @@
+title,description,customer_email,priority
+Printer driver will not install,Driver package fails at 80% on Windows 11.,ops@acme.example,medium
+Charged in USD instead of CAD,Invoice 5120 was billed in the wrong currency.,it@globex.example,high
+,No title in the export for this row.,ops@acme.example,low
+Cannot find the dark-mode setting,Customer expects it under Appearance.,it@globex.example,low
+Two-factor code rejected every time,Codes from the authenticator app are refused.,ops@acme.example,critical
+Please close my account,Requested by the account owner.,not-an-email,medium
+Discount code not applied at checkout,Code SPRING25 silently ignored.,someone@unknown.example,medium
+Receipt PDF is blank,Downloaded receipts open as an empty page.,it@globex.example,medium

@@ -5,6 +5,7 @@ package supporthub.agentdesk.v1;
 option csharp_namespace = "SupportHub.AgentDesk.V1";
  
 import "google/protobuf/timestamp.proto"; // -> DateTime / DateTimeOffset (UTC)
+import "google/protobuf/duration.proto";    // -> TimeSpan
 
 
 // Naming: the service is "AgentDeskService", not "AgentDesk".
@@ -17,6 +18,9 @@ service AgentDeskService {
 
   //Server streaming
   rpc WatchQueue (WatchQueueRequest) returns (stream QueueEvent);
+
+  //Client streaming
+  rpc ImportTickets (stream ImportTicketRequest) returns (ImportTicketsResponse);
 }
 
 
@@ -90,6 +94,7 @@ message QueueEvent {
   oneof payload {
     Ticket backlog = 2; // an already-open ticket, replayed at the start
     TicketAssigned assigned = 3; //a ticket was routed to an agent
+    Ticket created = 4;            // added in Client streamind: a brand-new ticket arrived (Nothing broke by adding a field)
   }
 }
  
@@ -98,6 +103,27 @@ message TicketAssigned {
   Agent agent = 2;
 }
 
+//Client streaming
+message ImportTicketRequest {
+  int32 line_number = 1;           // where it came from in the legacy export
+  string title = 2;
+  string description = 3;
+  string customer_email = 4;       // the old system knew customers by email, not id
+  TicketPriority priority = 5;     // UNSPECIFIED -> treated as MEDIUM
+}
+
+message ImportTicketsResponse {
+  int32 accepted = 1;
+  int32 rejected = 2;
+  repeated int32 created_ticket_ids = 3;
+  repeated ImportError errors = 4;
+  google.protobuf.Duration elapsed = 5;
+}
+
+message ImportError {
+  int32 line_number = 1;
+  string reason = 2;
+}
 
 
 

@@ -112,6 +112,39 @@ public sealed class AgentDeskGrpcService : AgentDeskService.AgentDeskServiceBase
         // and load balancers do not cut a stream that has simply been quiet.
     }
 
+    //Client Streaming
+    public override async Task<ImportTicketsResponse> ImportTickets(IAsyncStreamReader<ImportTicketRequest> requestStream, ServerCallContext context)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var result = new ImportTicketsResponse();
+
+        // Each row is handled the moment it lands: the server never holds the whole
+        // file in memory. That is the difference between importing two thousand
+        // tickets and importing two million.
+        //
+        // This loop ends when the client calls RequestStream.CompleteAsync().
+        await foreach (var row in requestStream.ReadAllAsync(context.CancellationToken))
+        {
+            try
+            {
+                var ticket = ImportOne(row);
+                result.Accepted++;
+                result.CreatedTicketIds.Add(ticket.Id);
+            }
+            catch (Exception ex) when (ex is InvalidImportRowException or UnknownCustomerException)
+            {
+                // One bad row is not a failed import: record it and keep going.
+                result.Rejected++;
+                result.Errors.Add(new ImportError { LineNumber = row.LineNumber, Reason = ex.Message });
+            }
+        }
+
+        result.Elapsed = Duration.FromTimeSpan(Stopwatch.GetElapsedTime(started));
+        _logger.LogInformation("Import finished: {Accepted} accepted, {Rejected} rejected",
+            result.Accepted, result.Rejected);
+
+        return result;
+    }
 
     //Helpers
     private static int RequireTicketId(int ticketId) => ticketId <= 0 ? 
@@ -132,10 +165,28 @@ public sealed class AgentDeskGrpcService : AgentDeskService.AgentDeskServiceBase
                     Agent = evt.Agent!.ToContract(_store.OpenTicketsFor(evt.Agent.Id)),
                 };
                 break;
+            //Server streaming
+            case TicketEventKind.Created:
+                queueEvent.Created = evt.Ticket.ToContract();
+                break;
         }
 
         return queueEvent;
     }
 
     private Timestamp Now() => Timestamp.FromDateTimeOffset(_clock.GetUtcNow());
+
+    //Client Streaming
+    private TicketRecord ImportOne(ImportTicketRequest row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Title))
+            throw new InvalidImportRowException("Title is required.");
+
+        // The legacy export knows customers by email; SupportHub knows them by id.
+        // Resolving that is the import's job.
+        var customer = _store.FindCustomerByEmail(row.CustomerEmail)
+            ?? throw new UnknownCustomerException(row.CustomerEmail);
+
+        return _store.Create(row.Title, row.Description, customer.Id, row.Priority.ToDomain());
+    }
 }
