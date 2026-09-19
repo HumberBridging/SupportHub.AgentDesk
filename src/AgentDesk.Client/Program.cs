@@ -42,6 +42,10 @@ try
             await ImportDemo.RunAsync(client, Path.Combine(AppContext.BaseDirectory, "legacy-tickets.csv"));
             break;
 
+        case "chat":
+            await ChatDemo.RunAsync(client, int.Parse(Arg(0, "1")), Arg(1, "agent"), Arg(2, "Priya"));
+            break;
+
         default:
             Console.WriteLine($"Unknown command: {command}");
             break;

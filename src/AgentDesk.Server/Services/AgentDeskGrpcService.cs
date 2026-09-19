@@ -1,4 +1,5 @@
-﻿using Google.Protobuf.WellKnownTypes;
+﻿using AgentDesk.Server.Services;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using SupportHub.AgentDesk.Server.Domain;
 using SupportHub.AgentDesk.V1;
@@ -11,12 +12,14 @@ public sealed class AgentDeskGrpcService : AgentDeskService.AgentDeskServiceBase
     private readonly TicketStore _store;
     private readonly ILogger<AgentDeskGrpcService> _logger;
 
-    private readonly TimeProvider _clock = TimeProvider.System;
-    public AgentDeskGrpcService(TicketStore ticketStore, ILogger<AgentDeskGrpcService> logger, TimeProvider clock)
+    private readonly ChatRoomRegistry _chatRooms;
+
+    private static readonly TimeProvider _clock = TimeProvider.System;
+    public AgentDeskGrpcService(TicketStore ticketStore, ILogger<AgentDeskGrpcService> logger, TimeProvider clock, ChatRoomRegistry chatRooms)
     {
         _store = ticketStore;
         _logger = logger;
-        _clock = clock;
+        _chatRooms = chatRooms;
     }
 
     //Unary
@@ -146,6 +149,87 @@ public sealed class AgentDeskGrpcService : AgentDeskService.AgentDeskServiceBase
         return result;
     }
 
+    //Bi-directional streaming
+    public override async Task Chat(IAsyncStreamReader<ChatMessage> requestStream, IServerStreamWriter<ChatMessage> responseStream, ServerCallContext context)
+    {
+        // Who is calling? Identity travels in METADATA — gRPC's equivalent of an
+        // HTTP header — not inside every message. (In production it would come
+        // from an authenticated token rather than a header the caller types, but
+        // the mechanism is exactly this.)
+        var headers = context.RequestHeaders;
+        var name = headers.GetValue("x-display-name")?.Trim();
+        var role = headers.GetValue("x-role")?.Trim().ToLowerInvariant() switch
+        {
+            "agent" => ChatRole.Agent,
+            "customer" => ChatRole.Customer,
+            _ => ChatRole.Unspecified,
+        };
+
+        if (!int.TryParse(headers.GetValue("x-ticket-id"), out var ticketId) ||
+            string.IsNullOrEmpty(name) || role == ChatRole.Unspecified)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                "Chat needs metadata: x-ticket-id (a number), x-display-name and x-role (agent | customer)."));
+        }
+
+        if (!_store.TryGet(ticketId, out _))
+            throw new RpcException(new Status(StatusCode.NotFound, $"Ticket {ticketId} does not exist."));
+
+        var room = _chatRooms.GetOrCreate(ticketId);
+        var me = room.Join();
+
+        // TWO LOOPS RUN AT THE SAME TIME. That is the whole point of bidirectional:
+        // reading and writing are independent, so neither side has to take turns.
+        //
+        // OUTBOUND loop: drain my inbox onto the response stream. This is the only
+        // code that writes to responseStream — a gRPC stream allows one writer.
+        var outbound = PumpInboxAsync(me, responseStream, context.CancellationToken);
+
+        room.Broadcast(SystemMessage(ticketId, $"{name} joined — {room.Count} in the room."));
+        _logger.LogInformation("{Name} joined the chat on ticket {TicketId}", name, ticketId);
+
+        try
+        {
+            // INBOUND loop: whatever this client types, for as long as they type it.
+            await foreach (var incoming in requestStream.ReadAllAsync(context.CancellationToken))
+            {
+                if (string.IsNullOrWhiteSpace(incoming.Text)) continue;
+
+                // Stamp sender, role, ticket and time OURSELVES, and ignore whatever
+                // the client put in those fields. A chat where the client gets to
+                // claim who it is is not a chat you would ship.
+                room.Broadcast(new ChatMessage
+                {
+                    Text = incoming.Text.Trim(),
+                    TicketId = ticketId,
+                    Sender = name,
+                    Role = role,
+                    SentAt = Now(),
+                });
+            }
+            // Getting here means the client called RequestStream.CompleteAsync().
+        }
+        catch (OperationCanceledException)
+        {
+            // The client vanished without saying goodbye.
+        }
+        finally
+        {
+            room.Broadcast(SystemMessage(ticketId, $"{name} left."));
+            me.Dispose();       // completes my inbox, so the outbound loop drains and ends
+            _logger.LogInformation("{Name} left the chat on ticket {TicketId}", name, ticketId);
+        }
+
+        try { await outbound; }
+        catch (OperationCanceledException) { /* the caller has gone; nothing left to deliver */ }
+
+        // A production version would also: check that this caller is allowed on
+        // this ticket, persist the transcript, and let the SERVER start messages of
+        // its own — an SLA countdown only the agent can see, for example. That last
+        // one is what makes this a conversation instead of a series of replies.
+
+    }
+
     //Helpers
     private static int RequireTicketId(int ticketId) => ticketId <= 0 ? 
         throw new RpcException(new Status(StatusCode.InvalidArgument, "ticket_id must be greater than zero.")): ticketId;
@@ -174,7 +258,7 @@ public sealed class AgentDeskGrpcService : AgentDeskService.AgentDeskServiceBase
         return queueEvent;
     }
 
-    private Timestamp Now() => Timestamp.FromDateTimeOffset(_clock.GetUtcNow());
+    private static Timestamp Now() => Timestamp.FromDateTimeOffset(_clock.GetUtcNow());
 
     //Client Streaming
     private TicketRecord ImportOne(ImportTicketRequest row)
@@ -189,4 +273,21 @@ public sealed class AgentDeskGrpcService : AgentDeskService.AgentDeskServiceBase
 
         return _store.Create(row.Title, row.Description, customer.Id, row.Priority.ToDomain());
     }
+
+    //Bi-Directional
+    private static async Task PumpInboxAsync(ChatRoom.Membership me,
+        IServerStreamWriter<ChatMessage> responseStream, CancellationToken cancellationToken)
+    {
+        await foreach (var message in me.Inbox.ReadAllAsync(cancellationToken))
+            await responseStream.WriteAsync(message);
+    }
+
+    private static ChatMessage SystemMessage(int ticketId, string text) => new()
+    {
+        Text = text,
+        TicketId = ticketId,
+        Sender = "SupportHub",
+        Role = ChatRole.System,
+        SentAt = Now(),
+    };
 }

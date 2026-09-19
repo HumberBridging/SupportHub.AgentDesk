@@ -1,3 +1,4 @@
+using AgentDesk.Server.Services;
 using SupportHub.AgentDesk.Server.Domain;
 using SupportHub.AgentDesk.Server.Services;
 
@@ -13,6 +14,9 @@ builder.Services.AddGrpc(options =>
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<TicketStore>();
+
+//Bi-directional
+builder.Services.AddSingleton<ChatRoomRegistry>();
 
 var app = builder.Build();
 

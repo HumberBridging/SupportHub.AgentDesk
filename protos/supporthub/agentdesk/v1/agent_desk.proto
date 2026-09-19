@@ -21,6 +21,10 @@ service AgentDeskService {
 
   //Client streaming
   rpc ImportTickets (stream ImportTicketRequest) returns (ImportTicketsResponse);
+
+  //BIDIRECTIONAL STREAMING: two independent streams -------------
+  // Live chat on a ticket. Who you are travels in METADATA (headers), not in the message: x-ticket-id, x-display-name, x-role (agent | customer).
+  rpc Chat (stream ChatMessage) returns (stream ChatMessage);
 }
 
 
@@ -125,6 +129,21 @@ message ImportError {
   string reason = 2;
 }
 
+//BiDirectional streaming
+enum ChatRole {
+  CHAT_ROLE_UNSPECIFIED = 0;
+  CHAT_ROLE_AGENT = 1;
+  CHAT_ROLE_CUSTOMER = 2;
+  CHAT_ROLE_SYSTEM = 3;            // messages the server itself sends
+}
 
+message ChatMessage {
+  string text = 1;                 // the only field a CLIENT needs to fill in
+  // The fields below are stamped by the SERVER from the caller's metadata. Never trust a client to tell you who it is inside the payload.
+  int32 ticket_id = 2;
+  string sender = 3;
+  ChatRole role = 4;
+  google.protobuf.Timestamp sent_at = 5;
+}
 
 
